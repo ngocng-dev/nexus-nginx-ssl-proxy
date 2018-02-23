@@ -1,0 +1,13 @@
+{
+  "name": "docker-proxy",
+  "type": "groovy",
+  "content": "repository.createDockerProxy( 'docker-proxy',
+                                            'http://{{ docker_proxy_source_url }}',
+                                            'REGISTRY',
+                                            'NOT_USED',
+                                            '{{ docker_repo_port }}',
+                                            'NOT_USED'
+                                            'default',
+                                            'true',
+                                            'true' )"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "maven-proxy",
+  "type": "groovy",
+  "content": "repository.createMavenProxy( 'maven-proxy', 'http://http://35.167.9.42:8081', 'default' )"
+}

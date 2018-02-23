@@ -1,0 +1,131 @@
+---
+#
+# Setup Nexus3 Repo
+#
+- name: Create Nexus Data directory
+  file:
+    path: '{{nexus_data_dir}}'
+    state: directory
+    mode: 0777
+
+- name: Create Nexus Docker Network
+  docker_network:
+    name: net-nexus
+
+- name: Start Nexus Docker Container
+  docker_container:
+    name: nexus3
+    image: sonatype/nexus3:{{nexus_version_tag}}
+    networks:
+      - name: net-nexus
+    volumes:
+      - '{{nexus_data_dir}}:/nexus-data'
+    restart_policy: always
+    state: started
+
+# Allow some time for Nexus to startup
+- name: Waiting for Nexus3 Docker Container Startup
+  wait_for: timeout=30
+
+- name: Get Nexus3 Container IP
+  shell: "docker inspect --format {% raw %}'{{ .NetworkSettings.IPAddress }}'{% endraw %} nexus3"
+  register: nexus_container_ip
+
+- name: Debug IP var  
+  debug: var=nexus_container_ip.stdout
+
+# Check that the Nexus3 script REST API is available
+- name: Check Nexus3 Script API
+  uri:
+    url: http://172.17.0.2:8081/service/rest/v1/script
+    user: admin
+    password: admin123
+    force_basic_auth: yes
+
+#
+# Configure Nexus Repos
+#
+
+- name: Copy Nexus3 Maven Proxy Config Script
+  template:
+    src: 'maven-proxy.json.j2'
+    dest: './maven-proxy.json' 
+
+- name: Upload Nexus3 Maven Proxy Config Script
+  shell: >
+    curl -v -u admin:admin123 --header "Content-Type: application/json" 'http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/' -d @maven-proxy.json
+
+- name: Run Nexus3 Maven Proxy Config Script
+  shell: >
+    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/maven-proxy/run"
+
+- name: Copy Nexus3 Docker Proxy Config Script
+  template:
+    src: 'docker-proxy.json.j2'
+    dest: './docker-proxy.json' 
+
+- name: Upload Nexus3 Docker Proxy Config Script
+  shell: >
+    curl -v -u admin:admin123 --header "Content-Type: application/json" 'http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/' -d @docker-proxy.json
+
+- name: Run Nexus3 Docker Proxy Config Script
+  shell: >
+    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy/run"
+
+#
+# Setup NGiNX Proxy
+#
+
+- name: Create NGiNX Directory
+  file:
+    path: '{{nginx_data_dir}}'
+    state: directory
+    mode: 0777
+
+- name: Create NGiNX Log Directory
+  file:
+    path: '{{nginx_log_dir}}'
+    state: directory
+    mode: 0777
+
+- name: Generate Self-signed Cert and Key
+  shell: >
+    openssl req -newkey rsa:4096 -nodes -sha256
+    -keyout {{nginx_data_dir}}/domain.key
+    -x509 -days 365
+    -out {{nginx_data_dir}}/domain.crt
+    -subj '/C=GB/ST=London/L=London/CN={{fqdn}}'
+
+- name: Copy NGiNX config
+  template:
+    src: 'nginx.conf.j2'
+    dest: '{{nginx_data_dir}}/nginx.conf' 
+
+- name: Deploy NGiNX Docker Container
+  docker_container:
+    name: nginx
+    image: 'nginx:{{nginx_version_tag}}'
+    volumes:
+      - '{{nginx_data_dir}}/nginx.conf:/etc/nginx/nginx.conf:ro'
+      - '{{nginx_log_dir}}:/var/log/nginx'
+      - '{{nginx_data_dir}}/domain.key:/etc/nginx/ssl.key:ro'
+      - '{{nginx_data_dir}}/domain.crt:/etc/nginx/ssl.crt:ro' 
+    published_ports:
+      - 443:443
+      - 8080:8080
+      - 8081:8081
+      - 5000:5000
+      - 5001:5001
+    networks:
+      - name: net-nexus
+    pull: yes
+    recreate: yes
+    restart_policy: always    
+    state: started
+
+- name: Healthcheck
+  uri:
+    url: http://localhost:8080/
+    follow_redirects: yes
+    validate_certs: no
+  
