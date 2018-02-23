@@ -1,7 +1,7 @@
 Role Name
 =========
 
-This role deploys two Docker containers, one for Nexus3 and one for NGiNX. This provides an SSL protected binary repository for use 
+This role deploys two Docker containers, one for Nexus3 and one for NGiNX. NGiNX acts as an SSL proxy for the Nexus repo.
 
 Requirements
 ------------
@@ -22,13 +22,13 @@ Example Playbook
 ----------------
 
 Included in this package is a test playbook in tests/test.yml
-
+<pre>
    ---
    - hosts: localhost
      remote_user: root
      roles:
        - nexus-proxy
-
+</pre>
 License
 -------
 
