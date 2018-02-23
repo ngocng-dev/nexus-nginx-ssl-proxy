@@ -1,5 +1,6 @@
 {
   "name": "maven-proxy",
   "type": "groovy",
-  "content": "repository.createMavenProxy( 'maven-proxy', 'http://{{ maven_proxy_source_url }}', 'default' )"
+  "content": "repository.getRepositoryManager().delete('maven-proxy');
+              repository.createMavenProxy( 'maven-proxy', '{{ maven_proxy_source_url }}', 'default' )"
 }

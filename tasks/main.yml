@@ -2,11 +2,14 @@
 #
 # Setup Nexus3 Repo
 #
-- name: Create Nexus Data directory
+- name: Create Nexus Data Directory
   file:
     path: '{{nexus_data_dir}}'
     state: directory
-    mode: 0777
+    owner: '{{nexus_uid}}'
+    group: root
+    mode: 0755
+  become: yes
 
 - name: Create Nexus Docker Network
   docker_network:
@@ -20,6 +23,8 @@
       - name: net-nexus
     volumes:
       - '{{nexus_data_dir}}:/nexus-data'
+    pull: yes
+    recreate: yes
     restart_policy: always
     state: started
 
@@ -37,10 +42,16 @@
 # Check that the Nexus3 script REST API is available
 - name: Check Nexus3 Script API
   uri:
-    url: http://172.17.0.2:8081/service/rest/v1/script
+    url: http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script
     user: admin
     password: admin123
     force_basic_auth: yes
+    follow_redirects: yes
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 1
 
 #
 # Configure Nexus Repos
@@ -51,13 +62,48 @@
     src: 'maven-proxy.json.j2'
     dest: './maven-proxy.json' 
 
+- name: Delete Nexus3 Maven Proxy Config Script
+  uri:
+    url: http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/maven-proxy
+    method: DELETE
+    user: admin
+    password: admin123
+    force_basic_auth : yes
+    follow_redirects: yes
+    status_code: 204,404
+
 - name: Upload Nexus3 Maven Proxy Config Script
   shell: >
     curl -v -u admin:admin123 --header "Content-Type: application/json" 'http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/' -d @maven-proxy.json
 
 - name: Run Nexus3 Maven Proxy Config Script
-  shell: >
-    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/maven-proxy/run"
+  uri:
+    url: http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/maven-proxy/run
+    headers:
+      Content-Type: 'text/plain'
+    method: POST
+    user: admin
+    password: admin123
+    force_basic_auth : yes
+    status_code: 200
+
+#  shell: >
+#    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/maven-proxy/run"
+
+##
+
+- name: Delete Nexus3 Docker Proxy Config Script
+  uri:
+    url: http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy
+    method: DELETE
+    user: admin
+    password: admin123
+    force_basic_auth : yes
+    follow_redirects: yes
+    status_code: 204,404
+
+#  shell: >
+#    curl -v -X DELETE -u admin:admin123 "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy"
 
 - name: Copy Nexus3 Docker Proxy Config Script
   template:
@@ -69,8 +115,18 @@
     curl -v -u admin:admin123 --header "Content-Type: application/json" 'http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/' -d @docker-proxy.json
 
 - name: Run Nexus3 Docker Proxy Config Script
-  shell: >
-    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy/run"
+  uri:
+    url: http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy/run
+    headers:
+      Content-Type: 'text/plain'
+    method: POST
+    user: admin
+    password: admin123
+    force_basic_auth : yes
+    status_code: 200
+
+#  shell: >
+#    curl -v -X POST -u admin:admin123 --header "Content-Type: text/plain" "http://{{nexus_container_ip.stdout}}:8081/service/rest/v1/script/docker-proxy/run"
 
 #
 # Setup NGiNX Proxy
@@ -80,13 +136,23 @@
   file:
     path: '{{nginx_data_dir}}'
     state: directory
-    mode: 0777
+    owner: '{{nginx_uid}}'
+    mode: 0755
+  become: yes
 
 - name: Create NGiNX Log Directory
   file:
     path: '{{nginx_log_dir}}'
     state: directory
-    mode: 0777
+    owner: '{{nginx_uid}}'
+    mode: 0755
+  become: yes
+
+- name: SSL Key Cleanup
+  shell: >
+    rm -rf {{nginx_data_dir}}/domain.key; rm -rf {{nginx_data_dir}}/domain.crt
+  become: yes
+  when: recreate_certs == true
 
 - name: Generate Self-signed Cert and Key
   shell: >
@@ -95,11 +161,15 @@
     -x509 -days 365
     -out {{nginx_data_dir}}/domain.crt
     -subj '/C=GB/ST=London/L=London/CN={{fqdn}}'
+  become: yes
+  when: recreate_certs == true
 
 - name: Copy NGiNX config
   template:
     src: 'nginx.conf.j2'
     dest: '{{nginx_data_dir}}/nginx.conf' 
+    owner: '{{nginx_uid}}'
+  become: yes
 
 - name: Deploy NGiNX Docker Container
   docker_container:

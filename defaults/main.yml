@@ -2,9 +2,13 @@
 # defaults file for nexus-proxy
 nexus_data_dir: /tmp/nexus-proxy/data #/opt/nexus-registry
 nexus_version_tag: 3.8.0
+nexus_uid: 200
 nginx_data_dir: /tmp/nexus-proxy/nginx #/opt/nginx
 nginx_log_dir: /tmp/nexus-proxy/nginx/log #/opt/nginx/log
 nginx_version_tag: 1.13.8-alpine
+nginx_uid: 100
 fqdn: localhost #my.host.domain.name.org
 maven_proxy_source_url: http://35.167.9.42:8081
 docker_proxy_source_url: http://35.167.9.42:5000
+docker_repo_port: 2375
+recreate_certs: yes

@@ -3,10 +3,10 @@
   "type": "groovy",
   "content": "repository.getRepositoryManager().delete('docker-proxy');
               repository.createDockerProxy( 'docker-proxy',
-                                            '{{ docker_proxy_source_url }}',
+                                            'http://35.167.9.42:5000',
                                             'REGISTRY',
                                             'NOT_USED',
-                                            {{ docker_repo_port }},
+                                            2375,
                                             null,
                                             'default',
                                             true,
